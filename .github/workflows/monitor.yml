@@ -41,6 +41,8 @@ jobs:
             const url =
               'https://eipro.jp/takachiho1/eventCalendars/index';
 
+            console.log('===== OPENING PAGE =====');
+
             await page.goto(url, {
               waitUntil: 'networkidle',
               timeout: 60000
@@ -48,51 +50,58 @@ jobs:
 
             await page.waitForTimeout(3000);
 
-            // 週表示に切り替える
-            const weekButton = page.getByText('週', { exact: true }).first();
+            console.log('===== SWITCH TO WEEK VIEW =====');
+
+            const weekButton =
+              page.getByText('週', { exact: true }).first();
 
             if (await weekButton.count()) {
               await weekButton.click();
               await page.waitForTimeout(3000);
+              console.log('週表示に切り替えました。');
+            } else {
+              console.log('週ボタンが見つかりませんでした。');
             }
 
-            console.log('===== 9/24 RELATED ELEMENTS =====');
+            console.log('===== SEARCHING 9/24 =====');
 
-            const elements = await page.locator('*').evaluateAll(els => {
-              return els
-                .filter(el => {
-                  const text = (el.innerText || '').trim();
-                  return text.includes('9/24') ||
-                         text.includes('9月24日');
-                })
-                .slice(0, 30)
-                .map(el => ({
+            const matches =
+              await page.locator('text=9/24').evaluateAll(elements =>
+                elements.map((el, i) => ({
+                  index: i,
                   tag: el.tagName,
+                  text: el.innerText?.slice(0, 500),
                   class: el.className,
                   id: el.id,
-                  text: (el.innerText || '').trim().slice(0, 500),
-                  html: el.outerHTML.slice(0, 3000)
-                }));
-            });
-
-            console.log(JSON.stringify(elements, null, 2));
-
-            console.log('===== BUTTONS =====');
-
-            const buttons = await page.locator('button, a').evaluateAll(els => {
-              return els.map(el => ({
-                tag: el.tagName,
-                text: (el.innerText || '').trim(),
-                class: el.className,
-                href: el.href || '',
-                html: el.outerHTML.slice(0, 1000)
-              })).filter(x =>
-                x.text ||
-                x.href
+                  outerHTML: el.outerHTML.slice(0, 3000),
+                  parentHTML:
+                    el.parentElement?.outerHTML.slice(0, 5000)
+                }))
               );
-            });
 
-            console.log(JSON.stringify(buttons, null, 2));
+            console.log('===== 9/24 ELEMENTS =====');
+            console.log(JSON.stringify(matches, null, 2));
+            console.log('=========================');
+
+            console.log('===== CALENDAR LINKS =====');
+
+            const links = await page.locator('a').evaluateAll(elements =>
+              elements
+                .map(el => ({
+                  text: (el.innerText || '').trim(),
+                  href: el.href || '',
+                  class: el.className,
+                  outerHTML: el.outerHTML.slice(0, 1500)
+                }))
+                .filter(x =>
+                  x.text ||
+                  x.href
+                )
+            );
+
+            console.log(JSON.stringify(links, null, 2));
+
+            console.log('===== END =====');
 
             await browser.close();
           })();
