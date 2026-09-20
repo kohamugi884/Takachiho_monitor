@@ -48,7 +48,7 @@ jobs:
 
             await page.waitForTimeout(3000);
 
-            // 週表示へ
+            // 週表示
             const weekButton =
               page.getByText('週', { exact: true }).first();
 
@@ -57,104 +57,97 @@ jobs:
               await page.waitForTimeout(3000);
             }
 
-            console.log('===== FIND 9/24 =====');
+            console.log('===== 9/24 COLUMN =====');
 
-            // 9/24の要素を取得
-            const dateInfo = await page.locator('span.notranslate')
-              .filter({ hasText: '9/24' })
-              .first()
-              .evaluate(el => {
+            // 9/24のヘッダー
+            const header = page.locator(
+              'th[data-date="2026-09-24"]'
+            ).first();
 
-                function simplify(node, depth = 0) {
-                  if (!node || depth > 6) return null;
-
-                  return {
-                    tag: node.tagName,
-                    id: node.id || '',
-                    class: typeof node.className === 'string'
-                      ? node.className
-                      : '',
-                    text: (node.innerText || '')
-                      .trim()
-                      .slice(0, 2000),
-                    children: Array.from(node.children)
-                      .slice(0, 30)
-                      .map(child => simplify(child, depth + 1))
-                  };
-                }
-
-                return simplify(el.parentElement);
-              });
+            if (!(await header.count())) {
+              console.log('9/24 header not found');
+              await browser.close();
+              return;
+            }
 
             console.log(
-              JSON.stringify(dateInfo, null, 2)
+              await header.evaluate(el => el.outerHTML)
             );
 
-            console.log('===== ELEMENTS AROUND 9/24 =====');
+            console.log('===== CALENDAR CONTAINERS =====');
 
-            const surrounding =
-              await page.locator('span.notranslate')
-                .filter({ hasText: '9/24' })
-                .first()
-                .evaluate(el => {
-
-                  let node = el;
-
-                  const result = [];
-
-                  for (let i = 0; i < 8 && node; i++) {
-                    result.push({
-                      level: i,
-                      tag: node.tagName,
-                      id: node.id || '',
-                      class:
-                        typeof node.className === 'string'
-                          ? node.className
-                          : '',
-                      text: (node.innerText || '')
-                        .trim()
-                        .slice(0, 5000),
-                      html: node.outerHTML.slice(0, 10000)
-                    });
-
-                    node = node.parentElement;
-                  }
-
-                  return result;
-                });
-
-            console.log(
-              JSON.stringify(surrounding, null, 2)
+            // FullCalendarのカレンダー本体を調査
+            const calendars = await page.locator(
+              '.fc-view, .fc-content, .fc-body, .fc-time-grid, .fc-slats'
+            ).evaluateAll(elements =>
+              elements.map(el => ({
+                tag: el.tagName,
+                class: el.className,
+                text: (el.innerText || '')
+                  .trim()
+                  .slice(0, 5000),
+                html: el.outerHTML.slice(0, 15000)
+              }))
             );
 
-            console.log('===== ALL ELEMENTS WITH 9/24 =====');
+            console.log(
+              JSON.stringify(calendars, null, 2)
+            );
 
-            const allMatches =
-              await page.locator('*').evaluateAll(elements =>
-                elements
-                  .filter(el => {
-                    const text =
-                      (el.innerText || '').trim();
+            console.log('===== EVENTS =====');
 
-                    return text === '9/24';
-                  })
-                  .map(el => ({
-                    tag: el.tagName,
-                    id: el.id || '',
-                    class:
-                      typeof el.className === 'string'
-                        ? el.className
-                        : '',
-                    html:
-                      el.parentElement?.parentElement
-                        ?.outerHTML
-                        .slice(0, 12000)
-                  }))
-                  .slice(0, 10)
-              );
+            // FullCalendarのイベント要素を調査
+            const events = await page.locator(
+              '.fc-event, .fc-time-grid-event, .fc-event-container, [data-event-id]'
+            ).evaluateAll(elements =>
+              elements.map((el, index) => ({
+                index,
+                tag: el.tagName,
+                class: el.className,
+                id: el.id,
+                text: (el.innerText || '')
+                  .trim()
+                  .slice(0, 1000),
+                href: el.href || '',
+                dataDate: el.getAttribute('data-date'),
+                dataStart: el.getAttribute('data-start'),
+                dataEnd: el.getAttribute('data-end'),
+                outerHTML: el.outerHTML.slice(0, 5000)
+              }))
+            );
 
             console.log(
-              JSON.stringify(allMatches, null, 2)
+              JSON.stringify(events, null, 2)
+            );
+
+            console.log('===== 9/24 RELATED EVENTS =====');
+
+            // 9/24列付近にある要素を調べる
+            const related = await page.locator(
+              '.fc-event, .fc-time-grid-event, .fc-event-container'
+            ).evaluateAll(elements =>
+              elements.map((el, index) => {
+                const rect = el.getBoundingClientRect();
+
+                return {
+                  index,
+                  tag: el.tagName,
+                  class: el.className,
+                  text: (el.innerText || '')
+                    .trim()
+                    .slice(0, 500),
+                  href: el.href || '',
+                  left: rect.left,
+                  right: rect.right,
+                  top: rect.top,
+                  bottom: rect.bottom,
+                  html: el.outerHTML.slice(0, 5000)
+                };
+              })
+            );
+
+            console.log(
+              JSON.stringify(related, null, 2)
             );
 
             console.log('===== END =====');
