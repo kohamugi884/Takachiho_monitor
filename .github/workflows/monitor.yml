@@ -24,6 +24,8 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Check reservation
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: |
           node <<'EOF'
           const { chromium } = require('playwright');
@@ -46,112 +48,74 @@ jobs:
               timeout: 60000
             });
 
-            await page.waitForTimeout(3000);
-
-            // 週表示
-            const weekButton =
-              page.getByText('週', { exact: true }).first();
+            // 「週」表示に切り替える
+            const weekButton = page.getByText('週', { exact: true }).first();
 
             if (await weekButton.count()) {
               await weekButton.click();
               await page.waitForTimeout(3000);
             }
 
-            console.log('===== 9/24 COLUMN =====');
-
-            // 9/24のヘッダー
-            const header = page.locator(
-              'th[data-date="2026-09-24"]'
-            ).first();
-
-            if (!(await header.count())) {
-              console.log('9/24 header not found');
-              await browser.close();
-              return;
-            }
-
-            console.log(
-              await header.evaluate(el => el.outerHTML)
-            );
-
-            console.log('===== CALENDAR CONTAINERS =====');
-
-            // FullCalendarのカレンダー本体を調査
-            const calendars = await page.locator(
-              '.fc-view, .fc-content, .fc-body, .fc-time-grid, .fc-slats'
-            ).evaluateAll(elements =>
-              elements.map(el => ({
-                tag: el.tagName,
-                class: el.className,
-                text: (el.innerText || '')
-                  .trim()
-                  .slice(0, 5000),
-                html: el.outerHTML.slice(0, 15000)
-              }))
-            );
-
-            console.log(
-              JSON.stringify(calendars, null, 2)
-            );
-
-            console.log('===== EVENTS =====');
-
-            // FullCalendarのイベント要素を調査
+            // 2026/09/24 のイベントを取得
             const events = await page.locator(
-              '.fc-event, .fc-time-grid-event, .fc-event-container, [data-event-id]'
-            ).evaluateAll(elements =>
-              elements.map((el, index) => ({
-                index,
-                tag: el.tagName,
-                class: el.className,
-                id: el.id,
-                text: (el.innerText || '')
-                  .trim()
-                  .slice(0, 1000),
-                href: el.href || '',
-                dataDate: el.getAttribute('data-date'),
-                dataStart: el.getAttribute('data-start'),
-                dataEnd: el.getAttribute('data-end'),
-                outerHTML: el.outerHTML.slice(0, 5000)
-              }))
-            );
+              'a.fc-time-grid-event'
+            ).evaluateAll(elements => {
 
-            console.log(
-              JSON.stringify(events, null, 2)
-            );
+              return elements.map((el, index) => {
 
-            console.log('===== 9/24 RELATED EVENTS =====');
+                const start =
+                  el.querySelector(
+                    'input.service_unit_service_start_datetime'
+                  )?.value || '';
 
-            // 9/24列付近にある要素を調べる
-            const related = await page.locator(
-              '.fc-event, .fc-time-grid-event, .fc-event-container'
-            ).evaluateAll(elements =>
-              elements.map((el, index) => {
-                const rect = el.getBoundingClientRect();
+                const end =
+                  el.querySelector(
+                    'input.service_unit_service_end_datetime'
+                  )?.value || '';
+
+                const serviceSession =
+                  el.querySelector(
+                    'input.service_unit_service_session_cd'
+                  )?.value || '';
+
+                const serviceCd =
+                  el.querySelector(
+                    'input.service_unit_service_cd'
+                  )?.value || '';
+
+                const time =
+                  el.querySelector('.fc-time')?.innerText || '';
+
+                const icon =
+                  el.querySelector('.service_icon')?.innerText || '';
+
+                const iconClass =
+                  el.querySelector('.service_icon i')?.className || '';
 
                 return {
                   index,
-                  tag: el.tagName,
-                  class: el.className,
-                  text: (el.innerText || '')
-                    .trim()
-                    .slice(0, 500),
-                  href: el.href || '',
-                  left: rect.left,
-                  right: rect.right,
-                  top: rect.top,
-                  bottom: rect.bottom,
-                  html: el.outerHTML.slice(0, 5000)
+                  start,
+                  end,
+                  time,
+                  serviceSession,
+                  serviceCd,
+                  icon,
+                  iconClass
                 };
-              })
-            );
 
-            console.log(
-              JSON.stringify(related, null, 2)
-            );
+              }).filter(event =>
+                event.start.startsWith('2026/09/24')
+              );
 
+            });
+
+            console.log('');
+            console.log('===== 2026/09/24 EVENTS =====');
+            console.log(JSON.stringify(events, null, 2));
             console.log('===== END =====');
+            console.log('');
 
             await browser.close();
+
           })();
           EOF
