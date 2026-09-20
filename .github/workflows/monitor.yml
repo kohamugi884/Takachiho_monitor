@@ -41,8 +41,6 @@ jobs:
             const url =
               'https://eipro.jp/takachiho1/eventCalendars/index';
 
-            console.log('===== OPENING PAGE =====');
-
             await page.goto(url, {
               waitUntil: 'networkidle',
               timeout: 60000
@@ -50,56 +48,114 @@ jobs:
 
             await page.waitForTimeout(3000);
 
-            console.log('===== SWITCH TO WEEK VIEW =====');
-
+            // 週表示へ
             const weekButton =
               page.getByText('週', { exact: true }).first();
 
             if (await weekButton.count()) {
               await weekButton.click();
               await page.waitForTimeout(3000);
-              console.log('週表示に切り替えました。');
-            } else {
-              console.log('週ボタンが見つかりませんでした。');
             }
 
-            console.log('===== SEARCHING 9/24 =====');
+            console.log('===== FIND 9/24 =====');
 
-            const matches =
-              await page.locator('text=9/24').evaluateAll(elements =>
-                elements.map((el, i) => ({
-                  index: i,
-                  tag: el.tagName,
-                  text: el.innerText?.slice(0, 500),
-                  class: el.className,
-                  id: el.id,
-                  outerHTML: el.outerHTML.slice(0, 3000),
-                  parentHTML:
-                    el.parentElement?.outerHTML.slice(0, 5000)
-                }))
-              );
+            // 9/24の要素を取得
+            const dateInfo = await page.locator('span.notranslate')
+              .filter({ hasText: '9/24' })
+              .first()
+              .evaluate(el => {
 
-            console.log('===== 9/24 ELEMENTS =====');
-            console.log(JSON.stringify(matches, null, 2));
-            console.log('=========================');
+                function simplify(node, depth = 0) {
+                  if (!node || depth > 6) return null;
 
-            console.log('===== CALENDAR LINKS =====');
+                  return {
+                    tag: node.tagName,
+                    id: node.id || '',
+                    class: typeof node.className === 'string'
+                      ? node.className
+                      : '',
+                    text: (node.innerText || '')
+                      .trim()
+                      .slice(0, 2000),
+                    children: Array.from(node.children)
+                      .slice(0, 30)
+                      .map(child => simplify(child, depth + 1))
+                  };
+                }
 
-            const links = await page.locator('a').evaluateAll(elements =>
-              elements
-                .map(el => ({
-                  text: (el.innerText || '').trim(),
-                  href: el.href || '',
-                  class: el.className,
-                  outerHTML: el.outerHTML.slice(0, 1500)
-                }))
-                .filter(x =>
-                  x.text ||
-                  x.href
-                )
+                return simplify(el.parentElement);
+              });
+
+            console.log(
+              JSON.stringify(dateInfo, null, 2)
             );
 
-            console.log(JSON.stringify(links, null, 2));
+            console.log('===== ELEMENTS AROUND 9/24 =====');
+
+            const surrounding =
+              await page.locator('span.notranslate')
+                .filter({ hasText: '9/24' })
+                .first()
+                .evaluate(el => {
+
+                  let node = el;
+
+                  const result = [];
+
+                  for (let i = 0; i < 8 && node; i++) {
+                    result.push({
+                      level: i,
+                      tag: node.tagName,
+                      id: node.id || '',
+                      class:
+                        typeof node.className === 'string'
+                          ? node.className
+                          : '',
+                      text: (node.innerText || '')
+                        .trim()
+                        .slice(0, 5000),
+                      html: node.outerHTML.slice(0, 10000)
+                    });
+
+                    node = node.parentElement;
+                  }
+
+                  return result;
+                });
+
+            console.log(
+              JSON.stringify(surrounding, null, 2)
+            );
+
+            console.log('===== ALL ELEMENTS WITH 9/24 =====');
+
+            const allMatches =
+              await page.locator('*').evaluateAll(elements =>
+                elements
+                  .filter(el => {
+                    const text =
+                      (el.innerText || '').trim();
+
+                    return text === '9/24';
+                  })
+                  .map(el => ({
+                    tag: el.tagName,
+                    id: el.id || '',
+                    class:
+                      typeof el.className === 'string'
+                        ? el.className
+                        : '',
+                    html:
+                      el.parentElement?.parentElement
+                        ?.outerHTML
+                        .slice(0, 12000)
+                  }))
+                  .slice(0, 10)
+              );
+
+            console.log(
+              JSON.stringify(allMatches, null, 2)
+            );
 
             console.log('===== END =====');
 
