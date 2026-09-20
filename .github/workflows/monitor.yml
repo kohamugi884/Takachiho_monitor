@@ -43,79 +43,155 @@ jobs:
             const url =
               'https://eipro.jp/takachiho1/eventCalendars/index';
 
-            await page.goto(url, {
-              waitUntil: 'networkidle',
-              timeout: 60000
-            });
+            try {
+              // ページを開く
+              await page.goto(url, {
+                waitUntil: 'networkidle',
+                timeout: 60000
+              });
 
-            // 「週」表示に切り替える
-            const weekButton = page.getByText('週', { exact: true }).first();
+              // 「週」表示に切り替える
+              const weekButton =
+                page.getByText('週', { exact: true }).first();
 
-            if (await weekButton.count()) {
-              await weekButton.click();
-              await page.waitForTimeout(3000);
-            }
+              if (await weekButton.count()) {
+                await weekButton.click();
+                await page.waitForTimeout(3000);
+              }
 
-            // 2026/09/24 のイベントを取得
-            const events = await page.locator(
-              'a.fc-time-grid-event'
-            ).evaluateAll(elements => {
+              // 9/24のイベントを取得
+              const events = await page.locator(
+                'a.fc-time-grid-event'
+              ).evaluateAll(elements => {
 
-              return elements.map((el, index) => {
+                return elements.map(el => {
 
-                const start =
-                  el.querySelector(
-                    'input.service_unit_service_start_datetime'
-                  )?.value || '';
+                  const start =
+                    el.querySelector(
+                      'input.service_unit_service_start_datetime'
+                    )?.value || '';
 
-                const end =
-                  el.querySelector(
-                    'input.service_unit_service_end_datetime'
-                  )?.value || '';
+                  const end =
+                    el.querySelector(
+                      'input.service_unit_service_end_datetime'
+                    )?.value || '';
 
-                const serviceSession =
-                  el.querySelector(
-                    'input.service_unit_service_session_cd'
-                  )?.value || '';
+                  const time =
+                    el.querySelector('.fc-time')?.innerText || '';
 
-                const serviceCd =
-                  el.querySelector(
-                    'input.service_unit_service_cd'
-                  )?.value || '';
+                  const iconClass =
+                    el.querySelector(
+                      '.service_icon i'
+                    )?.className || '';
 
-                const time =
-                  el.querySelector('.fc-time')?.innerText || '';
+                  return {
+                    start,
+                    end,
+                    time,
+                    iconClass
+                  };
 
-                const icon =
-                  el.querySelector('.service_icon')?.innerText || '';
+                }).filter(event =>
+                  event.start.startsWith('2026/09/24')
+                );
 
-                const iconClass =
-                  el.querySelector('.service_icon i')?.className || '';
+              });
 
-                return {
-                  index,
-                  start,
-                  end,
-                  time,
-                  serviceSession,
-                  serviceCd,
-                  icon,
-                  iconClass
-                };
+              console.log('');
+              console.log('===== 2026/09/24 EVENTS =====');
+              console.log(JSON.stringify(events, null, 2));
+              console.log('===== END =====');
+              console.log('');
 
-              }).filter(event =>
-                event.start.startsWith('2026/09/24')
+              // イベントが取得できなかった場合
+              if (events.length === 0) {
+                console.log(
+                  '9/24のイベントが取得できませんでした。'
+                );
+
+                process.exit(1);
+              }
+
+              // fa-times = 満席
+              // fa-times以外 = 空きの可能性あり
+              const available = events.filter(event =>
+                !event.iconClass.includes('fa-times')
               );
 
-            });
+              console.log(
+                `9/24: ${events.length}枠中 ${available.length}枠に空きの可能性あり`
+              );
 
-            console.log('');
-            console.log('===== 2026/09/24 EVENTS =====');
-            console.log(JSON.stringify(events, null, 2));
-            console.log('===== END =====');
-            console.log('');
+              // 空きなし
+              if (available.length === 0) {
+                console.log('現在、9/24に空きはありません。');
+                await browser.close();
+                return;
+              }
 
-            await browser.close();
+              // 空きあり
+              console.log('===== AVAILABLE =====');
+
+              for (const event of available) {
+                console.log(
+                  `${event.time} ${event.iconClass}`
+                );
+              }
+
+              console.log('=====================');
+
+              // ntfy通知
+              const topic = process.env.NTFY_TOPIC;
+
+              if (!topic) {
+                console.log(
+                  'NTFY_TOPIC が設定されていません。'
+                );
+
+                await browser.close();
+                return;
+              }
+
+              const message =
+                '高千穂峡貸しボート 9/24 に空きが出ました！\n\n' +
+                available
+                  .map(event => `・${event.time}`)
+                  .join('\n') +
+                '\n\n予約サイト:\n' +
+                url;
+
+              const response = await fetch(
+                `https://ntfy.sh/${topic}`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Title': '高千穂峡ボート空きあり',
+                    'Priority': 'high',
+                    'Tags': 'boat,warning'
+                  },
+                  body: message
+                }
+              );
+
+              console.log(
+                'ntfy response:',
+                response.status,
+                await response.text()
+              );
+
+              await browser.close();
+
+            } catch (error) {
+
+              console.error(
+                'ERROR:',
+                error
+              );
+
+              await browser.close();
+
+              process.exit(1);
+            }
 
           })();
           EOF
