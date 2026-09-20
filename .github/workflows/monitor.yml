@@ -24,8 +24,6 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Check reservation
-        env:
-          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: |
           node <<'EOF'
           const { chromium } = require('playwright');
@@ -48,7 +46,9 @@ jobs:
               timeout: 60000
             });
 
-            // 「週」表示に切り替える
+            await page.waitForTimeout(3000);
+
+            // 週表示に切り替える
             const weekButton = page.getByText('週', { exact: true }).first();
 
             if (await weekButton.count()) {
@@ -56,36 +56,43 @@ jobs:
               await page.waitForTimeout(3000);
             }
 
-            const bodyText = await page.locator('body').innerText();
+            console.log('===== 9/24 RELATED ELEMENTS =====');
 
-            console.log('===== PAGE TEXT =====');
-            console.log(bodyText);
-            console.log('=====================');
+            const elements = await page.locator('*').evaluateAll(els => {
+              return els
+                .filter(el => {
+                  const text = (el.innerText || '').trim();
+                  return text.includes('9/24') ||
+                         text.includes('9月24日');
+                })
+                .slice(0, 30)
+                .map(el => ({
+                  tag: el.tagName,
+                  class: el.className,
+                  id: el.id,
+                  text: (el.innerText || '').trim().slice(0, 500),
+                  html: el.outerHTML.slice(0, 3000)
+                }));
+            });
 
-            // まず9/24がページ上に存在することを確認
-            const hasTargetDate =
-              bodyText.includes('9/24') ||
-              bodyText.includes('09/24') ||
-              bodyText.includes('9月24日') ||
-              bodyText.includes('24日');
+            console.log(JSON.stringify(elements, null, 2));
 
-            if (!hasTargetDate) {
-              console.log('9/24が現在の表示範囲にありません。');
-              await browser.close();
-              return;
-            }
+            console.log('===== BUTTONS =====');
 
-            /*
-             * 現段階では、実際のカレンダーDOMをログに出して
-             * 9/24の空き枠の表現を確定させます。
-             *
-             * 予約サイトはJavaScriptでカレンダーを生成するため、
-             * ここで一度実際のDOMを確認してから
-             * 「○」「予約する」等の判定を確定します。
-             */
+            const buttons = await page.locator('button, a').evaluateAll(els => {
+              return els.map(el => ({
+                tag: el.tagName,
+                text: (el.innerText || '').trim(),
+                class: el.className,
+                href: el.href || '',
+                html: el.outerHTML.slice(0, 1000)
+              })).filter(x =>
+                x.text ||
+                x.href
+              );
+            });
 
-            console.log('9/24を検出しました。');
-            console.log('空き枠判定のためDOMを確認します。');
+            console.log(JSON.stringify(buttons, null, 2));
 
             await browser.close();
           })();
